@@ -1,23 +1,51 @@
 <?php
 
-use App\Models\Test;
-use Illuminate\Http\Request;
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
+/*
+|--------------------------------------------------------------------------
+| API Routes
+|--------------------------------------------------------------------------
+*/
 
-Route::get('/healthcheck', function() {
-    try {
-        return [
-            'status' => 'active',
-            'database' => Test::exists() ? 'connected' : 'no_records'
-        ];
-    } catch (\Exception $e) {
-        return [
-            'status' => 'error',
-            'message' => $e->getMessage()
-        ];
-    }
+// Authentication routes
+Route::prefix('auth')->group(function () {
+    Route::post('login', [AuthController::class, 'login']);
+    Route::post('logout', [AuthController::class, 'logout']);
+    Route::post('refresh', [AuthController::class, 'refresh']);
+    Route::get('me', [AuthController::class, 'me']);
+    Route::post('register', [AuthController::class, 'register']); // Admin only - checked in controller
+});
+
+// User management routes (Protected)
+Route::middleware('auth:api')->group(function () {
+    Route::apiResource('users', UserController::class)->only([
+        'index', 'show', 'update', 'destroy'
+    ]);
+    
+    // Additional user routes if needed
+    Route::get('users/{id}/profile', [UserController::class, 'show']);
+});
+
+// Future routes for POS system modules
+Route::middleware('auth:api')->group(function () {
+    // Sales routes (Cashier, Manager, Admin)
+    // Route::apiResource('sales', SalesController::class);
+    
+    // Inventory routes (Manager, Admin only)
+    // Route::apiResource('inventory', InventoryController::class);
+    
+    // Reports routes (Manager, Admin only)
+    // Route::prefix('reports')->group(function () {
+    //     Route::get('sales', [ReportController::class, 'sales']);
+    //     Route::get('inventory', [ReportController::class, 'inventory']);
+    // });
+    
+    // System configuration routes (Admin only)
+    // Route::prefix('system')->group(function () {
+    //     Route::get('config', [SystemController::class, 'getConfig']);
+    //     Route::post('config', [SystemController::class, 'updateConfig']);
+    // });
 });
