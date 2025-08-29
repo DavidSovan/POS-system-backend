@@ -13,14 +13,14 @@ use Illuminate\Support\Facades\Route;
 // Authentication routes
 Route::prefix('auth')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
-    Route::post('logout', [AuthController::class, 'logout']);
     Route::post('refresh', [AuthController::class, 'refresh']);
-    Route::get('me', [AuthController::class, 'me']);
     Route::post('register', [AuthController::class, 'register']); // Admin only - checked in controller
 });
 
 // User management routes (Protected)
 Route::middleware('auth:api')->group(function () {
+    Route::get('me', [AuthController::class, 'me']);
+    Route::post('logout', [AuthController::class, 'logout']);
     Route::apiResource('users', UserController::class)->only([
         'index', 'show', 'update', 'destroy'
     ]);

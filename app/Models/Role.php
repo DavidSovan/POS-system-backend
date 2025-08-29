@@ -19,13 +19,15 @@ class Role extends Model
         'name',
         'description',
     ];
-
-    /**
-     * Get all users with this role.
-     */
-    public function users(): HasMany
+    
+    public function permissions()
     {
-        return $this->hasMany(User::class);
+        return $this->belongsToMany(Permission::class);
+    }
+
+    public function users() 
+    {
+        return $this->belongsToMany(User::class);
     }
 
     /**
@@ -55,24 +57,25 @@ class Role extends Model
     /**
      * Get role permissions based on role type.
      */
-    public function getPermissions(): array
-    {
-        return match($this->name) {
-            'Admin' => [
-                'users.view', 'users.create', 'users.update', 'users.delete',
-                'sales.view', 'sales.create', 'sales.update', 'sales.delete',
-                'inventory.view', 'inventory.create', 'inventory.update', 'inventory.delete',
-                'reports.view', 'system.config'
-            ],
-            'Manager' => [
-                'sales.view', 'sales.create', 'sales.update', 'sales.delete',
-                'inventory.view', 'inventory.create', 'inventory.update', 'inventory.delete',
-                'reports.view'
-            ],
-            'Cashier' => [
-                'sales.view', 'sales.create'
-            ],
-            default => []
-        };
-    }
+
+    // public function getPermissions(): array
+    // {
+    //     return match($this->name) {
+    //         'Admin' => [
+    //             'users.view', 'users.create', 'users.update', 'users.delete',
+    //             'sales.view', 'sales.create', 'sales.update', 'sales.delete',
+    //             'inventory.view', 'inventory.create', 'inventory.update', 'inventory.delete',
+    //             'reports.view', 'system.config'
+    //         ],
+    //         'Manager' => [
+    //             'sales.view', 'sales.create', 'sales.update', 'sales.delete',
+    //             'inventory.view', 'inventory.create', 'inventory.update', 'inventory.delete',
+    //             'reports.view'
+    //         ],
+    //         'Cashier' => [
+    //             'sales.view', 'sales.create'
+    //         ],
+    //         default => []
+    //     };
+    // }
 }

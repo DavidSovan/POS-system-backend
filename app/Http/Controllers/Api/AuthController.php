@@ -18,7 +18,7 @@ class AuthController extends Controller
      */
     public function __construct()
     {
-        $this->middleware('auth:api', ['except' => ['login']]);
+        $this->middleware('auth:api', ['except' => ['login', 'register']]);
     }
 
     /**
@@ -84,37 +84,27 @@ class AuthController extends Controller
     public function register(RegisterRequest $request): JsonResponse
     {
         // Check if authenticated user is admin
-        $currentUser = auth()->user();
-        if (!$currentUser || !$currentUser->isAdmin()) {
-            return response()->json([
-                'status' => 'error',
-                'code' => 'ERR_UNAUTHORIZED',
-                'message' => 'Only administrators can create new users',
-            ], 403);
-        }
-
         try {
             $user = User::create([
-                'name' => $request->name,
-                'email' => $request->email,
-                'password' => Hash::make($request->password),
-                'role_id' => $request->role_id,
-                'status' => 'pending', // New users start as pending
+                'name'   => $request->name,
+                'email'  => trim($request->email),
+                'password' => Hash::make(trim($request->password)),
+                'status'   => 'pending', // New users start as pending
             ]);
 
-            $user->load('role');
+            // $user->load('role');
 
             return response()->json([
                 'status' => 'success',
                 'data' => [
                     'user' => [
-                        'id' => $user->id,
-                        'name' => $user->name,
+                        'id'    => $user->id,
+                        'name'  => $user->name,
                         'email' => $user->email,
-                        'role' => [
-                            'id' => $user->role->id,
-                            'name' => $user->role->name,
-                        ],
+                        // 'role'  => [
+                        //     'id'   => $user->role->id,
+                        //     'name' => $user->role->name,
+                        // ],
                         'status' => $user->status,
                         'created_at' => $user->created_at,
                     ],
@@ -214,11 +204,11 @@ class AuthController extends Controller
                 'token_type' => 'bearer',
                 'expires_in' => JWTAuth::factory()->getTTL() * 60,
                 'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
+                    'id'    => $user->id,
+                    'name'  => $user->name,
                     'email' => $user->email,
-                    'role' => [
-                        'id' => $user->role->id,
+                    'role'  => [
+                        'id'   => $user->role->id,
                         'name' => $user->role->name,
                     ],
                     'status' => $user->status,
@@ -227,4 +217,25 @@ class AuthController extends Controller
             ],
         ]);
     }
+
+    // public function success(mixed $data, string $message='', int $statusCode=200, string $status='', $option=[])
+    // {
+    //     $response = [
+    //         'status' => $status,
+    //         'data'   => $data ?? [],
+    //         'message'=> $message
+    //     ];
+    //     if($option) $response['option'] = $option;
+    //     return response()->json($response, $statusCode);
+    // }
+
+    // public function error(string $message='Something went wrong!', int $statusCode = 500, string $status='',  int | string $code='ERR_USER_CREATION_FAILED')
+    // {
+    //     $response = [
+    //         'status' => $statusCode,
+    //         'code'   => $code,
+    //         'message'=> $message
+    //     ];
+    //     return response()->json($response, $status);
+    // }
 }

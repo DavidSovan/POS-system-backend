@@ -27,7 +27,6 @@ class RegisterRequest extends FormRequest
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|min:8|regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/',
-            'role_id' => 'required|exists:roles,id',
         ];
     }
 
@@ -45,8 +44,6 @@ class RegisterRequest extends FormRequest
             'password.required' => 'Password is required',
             'password.min' => 'Password must be at least 8 characters long',
             'password.regex' => 'Password must contain at least one uppercase letter, one lowercase letter, and one digit',
-            'role_id.required' => 'Role is required',
-            'role_id.exists' => 'Selected role does not exist',
         ];
     }
 

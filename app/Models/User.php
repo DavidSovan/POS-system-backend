@@ -51,10 +51,28 @@ class User extends Authenticatable implements JWTSubject
     /**
      * Get the user's role.
      */
-    public function role(): BelongsTo
+
+    public function roles() 
     {
-        return $this->belongsTo(Role::class);
+        return $this->belongsToMany(Role::class);
     }
+
+    public function hasRole($role) 
+    {
+        return $this->roles()->where('name', $role)->exists();
+    }
+
+    public function hasPermission($permission) 
+    {
+        return $this->roles()
+            ->whereHas('permissions', fn($q) => $q->where('name', $permission))
+            ->exists();
+    }
+
+    // public function role(): BelongsTo
+    // {
+    //     return $this->belongsTo(Role::class);
+    // }
 
     /**
      * Get the identifier that will be stored in the subject claim of the JWT.
@@ -114,14 +132,14 @@ class User extends Authenticatable implements JWTSubject
     /**
      * Check if user has permission.
      */
-    public function hasPermission(string $permission): bool
-    {
-        if (!$this->role) {
-            return false;
-        }
+    // public function hasPermission(string $permission): bool
+    // {
+    //     if (!$this->role) {
+    //         return false;
+    //     }
 
-        return in_array($permission, $this->role->getPermissions());
-    }
+    //     return in_array($permission, $this->role->getPermissions());
+    // }
 
     /**
      * Scope active users only.

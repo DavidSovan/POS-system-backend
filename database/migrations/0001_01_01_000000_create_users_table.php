@@ -18,29 +18,13 @@ return new class extends Migration
             $table->string('name');
             $table->string('email')->unique();
             $table->string('password');
-            $table->foreignId('role_id')->constrained('roles')->onDelete('restrict');
             $table->enum('status', ['pending', 'active', 'suspended', 'deactivated'])->default('pending');
             $table->timestamp('email_verified_at')->nullable();
             $table->rememberToken();
             $table->timestamps();
 
             $table->index(['email', 'status']);
-            $table->index('role_id');
         });
-
-        // Create default admin user
-        $adminRoleId = DB::table('roles')->where('name', 'Admin')->value('id');
-        
-        DB::table('users')->insert([
-            'name' => 'System Administrator',
-            'email' => 'admin@pos-system.com',
-            'password' => Hash::make('Admin@123'),
-            'role_id' => $adminRoleId,
-            'status' => 'active',
-            'email_verified_at' => now(),
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
     }
 
     /**

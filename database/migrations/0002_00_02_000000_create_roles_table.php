@@ -18,13 +18,6 @@ return new class extends Migration
             $table->string('description')->nullable();
             $table->timestamps();
         });
-
-        // Insert default roles
-        DB::table('roles')->insert([
-            ['name' => 'Admin', 'description' => 'Full system access', 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Manager', 'description' => 'Sales, inventory, and reporting access', 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Cashier', 'description' => 'Sales-related access only', 'created_at' => now(), 'updated_at' => now()],
-        ]);
     }
 
     /**
