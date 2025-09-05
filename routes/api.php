@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\InventoryController;
+use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -29,13 +31,25 @@ Route::middleware('auth:api')->group(function () {
     Route::get('users/{id}/profile', [UserController::class, 'show']);
 });
 
+// Product & Inventory Management (Manager, Admin only)
+Route::middleware('auth:api')->group(function () {
+    // Product CRUD routes
+    Route::apiResource('products', ProductController::class);
+    
+    // Inventory management routes
+    Route::prefix('inventory')->group(function () {
+        Route::post('add', [InventoryController::class, 'addStock']);
+        Route::post('remove', [InventoryController::class, 'removeStock']);
+        Route::get('movements', [InventoryController::class, 'getAllStockMovements']);
+        Route::get('products/{productId}/movements', [InventoryController::class, 'getProductStockMovements']);
+        Route::get('low-stock', [InventoryController::class, 'getLowStockProducts']);
+    });
+});
+
 // Future routes for POS system modules
 Route::middleware('auth:api')->group(function () {
     // Sales routes (Cashier, Manager, Admin)
     // Route::apiResource('sales', SalesController::class);
-    
-    // Inventory routes (Manager, Admin only)
-    // Route::apiResource('inventory', InventoryController::class);
     
     // Reports routes (Manager, Admin only)
     // Route::prefix('reports')->group(function () {
