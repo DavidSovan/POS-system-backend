@@ -16,6 +16,7 @@ class Sale extends Model
         'cashier_id',
         'total_amount',
         'payment_method',
+        'status',
     ];
 
     protected function casts(): array

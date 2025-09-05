@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\SalesController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -49,6 +50,9 @@ Route::middleware('auth:api')->group(function () {
 // Future routes for POS system modules
 Route::middleware('auth:api')->group(function () {
     // Sales routes (Cashier, Manager, Admin)
+    Route::post('sales', [SalesController::class, 'store']);
+    Route::post('sales/{saleId}/items', [SalesController::class, 'addItem']);
+    Route::patch('sales/{saleId}/checkout', [SalesController::class, 'checkout']);
     // Route::apiResource('sales', SalesController::class);
     
     // Reports routes (Manager, Admin only)
