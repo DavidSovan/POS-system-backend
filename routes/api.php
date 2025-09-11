@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\SalesController;
+use App\Http\Controllers\Api\CategoryController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -32,10 +33,13 @@ Route::middleware('auth:api')->group(function () {
     Route::get('users/{id}/profile', [UserController::class, 'show']);
 });
 
-// Product & Inventory Management (Manager, Admin only)
+// Product, Category & Inventory Management (Manager, Admin only)
 Route::middleware('auth:api')->group(function () {
     // Product CRUD routes
     Route::apiResource('products', ProductController::class);
+
+    // Category routes
+    Route::get('categories', [CategoryController::class, 'index']);
     
     // Inventory management routes
     Route::prefix('inventory')->group(function () {
@@ -50,9 +54,11 @@ Route::middleware('auth:api')->group(function () {
 // Future routes for POS system modules
 Route::middleware('auth:api')->group(function () {
     // Sales routes (Cashier, Manager, Admin)
+    Route::get('sales', [SalesController::class, 'index']);
     Route::post('sales', [SalesController::class, 'store']);
     Route::post('sales/{saleId}/items', [SalesController::class, 'addItem']);
     Route::patch('sales/{saleId}/checkout', [SalesController::class, 'checkout']);
+    Route::get('sales/{saleId}', [SalesController::class, 'show']);
     // Route::apiResource('sales', SalesController::class);
     
     // Reports routes (Manager, Admin only)

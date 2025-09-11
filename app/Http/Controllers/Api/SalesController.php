@@ -11,6 +11,8 @@ use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class SalesController extends Controller
@@ -148,13 +150,78 @@ class SalesController extends Controller
     }
 
     /**
+     * Show a sale with receipt-friendly formatting.
+     */
+    public function show(int $saleId): JsonResponse
+    {
+        $user = auth()->user();
+
+        $sale = Sale::with(['saleItems.product', 'payment', 'cashier'])->find($saleId);
+        if (!$sale) {
+            return response()->json([
+                'status' => 'error',
+                'code' => 'ERR_SALE_NOT_FOUND',
+                'message' => 'Sale not found',
+            ], 404);
+        }
+
+        // Access control: cashiers can only access their own sales
+        if ($sale->cashier_id !== $user->id) {
+            return response()->json([
+                'status' => 'error',
+                'code' => 'ERR_UNAUTHORIZED',
+                'message' => 'You are not authorized to view this sale',
+            ], 403);
+        }
+
+        $items = $sale->saleItems->map(function ($item) {
+            return [
+                'product_id' => $item->product_id,
+                'product_name' => optional($item->product)->name,
+                'quantity' => (int) $item->quantity,
+                'price' => (float) $item->price,
+                'discount' => (float) $item->discount,
+                'subtotal' => (float) $item->subtotal,
+            ];
+        })->values();
+
+        $payment = $sale->payment ? [
+            'id' => $sale->payment->id,
+            'method' => $sale->payment->method,
+            'amount' => (float) $sale->payment->amount,
+            'change_given' => (float) $sale->payment->change_given,
+        ] : null;
+
+        $data = [
+            'sale' => [
+                'id' => $sale->id,
+                'status' => $sale->status,
+                'payment_method' => $sale->payment_method,
+                'total_amount' => (float) $sale->total_amount,
+                'created_at' => $sale->created_at?->toISOString(),
+            ],
+            'items' => $items,
+            'payment' => $payment,
+            'cashier' => [
+                'id' => $sale->cashier->id,
+                'name' => $sale->cashier->name,
+            ],
+        ];
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $data,
+        ]);
+    }
+
+    /**
      * Checkout a sale.
      */
     public function checkout(int $saleId, CheckoutSaleRequest $request): JsonResponse
     {
         $user = auth()->user();
 
-        $sale = Sale::with(['saleItems', 'payment'])->find($saleId);
+        $sale = Sale::with(['saleItems', 'payment', 'cashier'])->find($saleId);
         if (!$sale) {
             return response()->json([
                 'status' => 'error',
@@ -242,5 +309,100 @@ class SalesController extends Controller
                 'message' => 'Failed to checkout sale',
             ], 500);
         }
+    }
+
+    /**
+     * List sales with filtering and pagination for reporting/history.
+     * Query params:
+     * - date (YYYY-MM-DD): filter by sale creation date
+     * - cashier_id (admin only): filter by cashier
+     * - limit (int): page size, default 10, max 100
+     * - offset (int): offset for pagination, default 0
+     */
+    public function index(Request $request): JsonResponse
+    {
+        $user = auth()->user();
+
+        $limit = (int) ($request->query('limit', 10));
+        $offset = (int) ($request->query('offset', 0));
+        $limit = $limit > 0 ? min($limit, 100) : 10;
+        $offset = max($offset, 0);
+
+        $date = $request->query('date');
+        $cashierId = $request->query('cashier_id');
+
+        $query = Sale::query()->with(['cashier', 'payment'])->withCount('saleItems');
+
+        // Role-based access: cashiers only see their own sales
+        if ($user->isCashier()) {
+            $query->where('cashier_id', $user->id);
+        } else {
+            // Admins can see all, and filter by cashier_id
+            if ($cashierId && $user->isAdmin()) {
+                $query->where('cashier_id', (int) $cashierId);
+            }
+        }
+
+        // Date filter (specific date)
+        if ($date) {
+            try {
+                $d = Carbon::parse($date)->toDateString();
+                $query->whereDate('created_at', $d);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'status' => 'error',
+                    'code' => 'ERR_INVALID_DATE',
+                    'message' => 'Invalid date format. Use YYYY-MM-DD.',
+                ], 422);
+            }
+        }
+
+        // Summary before pagination
+        $total = (clone $query)->count();
+        $sumTotalAmount = (float) (clone $query)->sum('total_amount');
+
+        // Apply pagination
+        $sales = $query
+            ->orderByDesc('created_at')
+            ->skip($offset)
+            ->take($limit)
+            ->get();
+
+        $data = [
+            'summary' => [
+                'total' => $total,
+                'total_amount' => $sumTotalAmount,
+            ],
+            'pagination' => [
+                'limit' => $limit,
+                'offset' => $offset,
+                'count' => $sales->count(),
+            ],
+            'sales' => $sales->map(function (Sale $s) {
+                return [
+                    'id' => $s->id,
+                    'status' => $s->status,
+                    'payment_method' => $s->payment_method,
+                    'total_amount' => (float) $s->total_amount,
+                    'items_count' => $s->sale_items_count,
+                    'cashier' => [
+                        'id' => $s->cashier?->id,
+                        'name' => $s->cashier?->name,
+                    ],
+                    'payment' => $s->payment ? [
+                        'id' => $s->payment->id,
+                        'method' => $s->payment->method,
+                        'amount' => (float) $s->payment->amount,
+                        'change_given' => (float) $s->payment->change_given,
+                    ] : null,
+                    'created_at' => $s->created_at?->toISOString(),
+                ];
+            })->values(),
+        ];
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $data,
+        ]);
     }
 }

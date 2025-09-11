@@ -12,7 +12,7 @@ class ProductPolicy
      */
     public function viewAny(User $user): bool
     {
-        return $user->isAdmin() || $user->isManager();
+        return $user->isAdmin() || $user->isManager() || $user->isCashier();
     }
 
     /**
@@ -20,7 +20,7 @@ class ProductPolicy
      */
     public function view(User $user, Product $product): bool
     {
-        return $user->isAdmin() || $user->isManager();
+        return $user->isAdmin() || $user->isManager() || $user->isCashier();
     }
 
     /**
