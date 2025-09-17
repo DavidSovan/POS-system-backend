@@ -210,4 +210,128 @@ class SaleItemsTest extends TestCase
             'subtotal' => 100.00,
         ]);
     }
+
+    public function test_update_item_quantity_increase_updates_totals_and_stock(): void
+    {
+        $token = JWTAuth::fromUser($this->cashierUser);
+
+        // Start sale
+        $saleId = $this->withHeaders(['Authorization' => 'Bearer ' . $token])->postJson('/api/sales', [])->json('data.sale_id');
+
+        // Add 1 item (100)
+        $this->withHeaders(['Authorization' => 'Bearer ' . $token])->postJson("/api/sales/{$saleId}/items", [
+            'product_id' => $this->product->id,
+            'quantity' => 1,
+        ])->assertStatus(200);
+
+        // Increase to 3 units (gross 300)
+        $res = $this->withHeaders(['Authorization' => 'Bearer ' . $token])->patchJson("/api/sales/{$saleId}/items/1", [
+            'quantity' => 3,
+        ]);
+        $res->assertStatus(200)->assertJson(['status' => 'success']);
+
+        // Total should be 300, stock reduced by +2 (start 10 -> after add 9 -> after update 7)
+        $this->assertDatabaseHas('sales', [
+            'id' => $saleId,
+            'total_amount' => 300.00,
+        ]);
+        $this->product->refresh();
+        $this->assertEquals(7, $this->product->stock);
+    }
+
+    public function test_update_item_quantity_decrease_updates_totals_and_stock_back(): void
+    {
+        $token = JWTAuth::fromUser($this->cashierUser);
+
+        $saleId = $this->withHeaders(['Authorization' => 'Bearer ' . $token])->postJson('/api/sales', [])->json('data.sale_id');
+
+        // Add 3 items (300)
+        $this->withHeaders(['Authorization' => 'Bearer ' . $token])->postJson("/api/sales/{$saleId}/items", [
+            'product_id' => $this->product->id,
+            'quantity' => 3,
+        ])->assertStatus(200);
+
+        // Decrease to 1 unit (100)
+        $res = $this->withHeaders(['Authorization' => 'Bearer ' . $token])->patchJson("/api/sales/{$saleId}/items/1", [
+            'quantity' => 1,
+        ]);
+        $res->assertStatus(200);
+
+        $this->assertDatabaseHas('sales', [
+            'id' => $saleId,
+            'total_amount' => 100.00,
+        ]);
+        $this->product->refresh();
+        // start 10 -> after add 7 -> after decrease back to 1 returns 2 -> 9
+        $this->assertEquals(9, $this->product->stock);
+    }
+
+    public function test_update_item_quantity_insufficient_stock(): void
+    {
+        $token = JWTAuth::fromUser($this->cashierUser);
+        $saleId = $this->withHeaders(['Authorization' => 'Bearer ' . $token])->postJson('/api/sales', [])->json('data.sale_id');
+
+        // Add 9 items (leaving stock 1)
+        $this->withHeaders(['Authorization' => 'Bearer ' . $token])->postJson("/api/sales/{$saleId}/items", [
+            'product_id' => $this->product->id,
+            'quantity' => 9,
+        ])->assertStatus(200);
+
+        // Try to increase to 11 (requires +2 more but only 1 left)
+        $res = $this->withHeaders(['Authorization' => 'Bearer ' . $token])->patchJson("/api/sales/{$saleId}/items/1", [
+            'quantity' => 11,
+        ]);
+        $res->assertStatus(400)->assertJson(['code' => 'ERR_INSUFFICIENT_STOCK']);
+    }
+
+    public function test_remove_item_restores_stock_and_updates_total(): void
+    {
+        $token = JWTAuth::fromUser($this->cashierUser);
+        $saleId = $this->withHeaders(['Authorization' => 'Bearer ' . $token])->postJson('/api/sales', [])->json('data.sale_id');
+
+        // Add 2 x 100 -> total 200, stock 8
+        $this->withHeaders(['Authorization' => 'Bearer ' . $token])->postJson("/api/sales/{$saleId}/items", [
+            'product_id' => $this->product->id,
+            'quantity' => 2,
+        ])->assertStatus(200);
+
+        // Remove item id 1
+        $res = $this->withHeaders(['Authorization' => 'Bearer ' . $token])->deleteJson("/api/sales/{$saleId}/items/1");
+        $res->assertStatus(200);
+
+        // Total becomes 0 and stock restored to 10
+        $this->assertDatabaseHas('sales', [
+            'id' => $saleId,
+            'total_amount' => 0.00,
+        ]);
+        $this->product->refresh();
+        $this->assertEquals(10, $this->product->stock);
+    }
+
+    public function test_cannot_modify_items_after_checkout(): void
+    {
+        $token = JWTAuth::fromUser($this->cashierUser);
+        $saleId = $this->withHeaders(['Authorization' => 'Bearer ' . $token])->postJson('/api/sales', [])->json('data.sale_id');
+
+        // Add 1 item and checkout
+        $this->withHeaders(['Authorization' => 'Bearer ' . $token])->postJson("/api/sales/{$saleId}/items", [
+            'product_id' => $this->product->id,
+            'quantity' => 1,
+        ])->assertStatus(200);
+
+        $this->withHeaders(['Authorization' => 'Bearer ' . $token])->patchJson("/api/sales/{$saleId}/checkout", [
+            'payment_method' => 'cash',
+            'amount' => 100,
+        ])->assertStatus(200);
+
+        // Try to update quantity
+        $this->withHeaders(['Authorization' => 'Bearer ' . $token])->patchJson("/api/sales/{$saleId}/items/1", [
+            'quantity' => 2,
+        ])->assertStatus(409)->assertJson(['code' => 'ERR_SALE_ALREADY_COMPLETED']);
+
+        // Try to remove item
+        $this->withHeaders(['Authorization' => 'Bearer ' . $token])->deleteJson("/api/sales/{$saleId}/items/1")
+            ->assertStatus(409)
+            ->assertJson(['code' => 'ERR_SALE_ALREADY_COMPLETED']);
+    }
 }

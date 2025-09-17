@@ -405,4 +405,209 @@ class SalesController extends Controller
             'data' => $data,
         ]);
     }
+
+    /**
+     * Update the quantity of an existing sale item.
+     */
+    public function updateItemQuantity(int $saleId, int $itemId, Request $request): JsonResponse
+    {
+        $user = auth()->user();
+
+        $request->validate([
+            'quantity' => 'required|integer|min:1',
+        ]);
+
+        $sale = Sale::with(['saleItems', 'saleItems.product'])->find($saleId);
+        if (!$sale) {
+            return response()->json([
+                'status' => 'error',
+                'code' => 'ERR_SALE_NOT_FOUND',
+                'message' => 'Sale not found',
+            ], 404);
+        }
+
+        if ($sale->cashier_id !== $user->id) {
+            return response()->json([
+                'status' => 'error',
+                'code' => 'ERR_UNAUTHORIZED',
+                'message' => 'You are not authorized to modify this sale',
+            ], 403);
+        }
+
+        if ($sale->status === 'completed') {
+            return response()->json([
+                'status' => 'error',
+                'code' => 'ERR_SALE_ALREADY_COMPLETED',
+                'message' => 'Sale has already been completed',
+            ], 409);
+        }
+
+        $saleItem = $sale->saleItems->firstWhere('id', $itemId);
+        if (!$saleItem) {
+            return response()->json([
+                'status' => 'error',
+                'code' => 'ERR_SALE_ITEM_NOT_FOUND',
+                'message' => 'Sale item not found',
+            ], 404);
+        }
+
+        $newQty = (int) $request->quantity;
+        $oldQty = (int) $saleItem->quantity;
+        if ($newQty === $oldQty) {
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'sale' => $sale->fresh(['saleItems.product']),
+                    'message' => 'Quantity unchanged',
+                ],
+            ]);
+        }
+
+        $product = $saleItem->product; // eager loaded
+        if (!$product) {
+            return response()->json([
+                'status' => 'error',
+                'code' => 'ERR_PRODUCT_NOT_FOUND',
+                'message' => 'Product not found for sale item',
+            ], 404);
+        }
+
+        try {
+            $updatedSale = DB::transaction(function () use ($sale, $saleItem, $product, $oldQty, $newQty) {
+                $diff = $newQty - $oldQty; // positive if increasing
+
+                // If increasing quantity, ensure enough stock and decrement stock; if decreasing, increment stock back
+                if ($diff > 0) {
+                    if ($product->stock < $diff) {
+                        abort(response()->json([
+                            'status' => 'error',
+                            'code' => 'ERR_INSUFFICIENT_STOCK',
+                            'message' => "Insufficient stock. Available: {$product->stock}, Requested extra: {$diff}",
+                        ], 400));
+                    }
+                    $product->adjustStock($diff, 'out', 'sale', "Sale #{$sale->id} - Item qty increased", null, (string) $sale->id);
+                } elseif ($diff < 0) {
+                    $product->adjustStock(abs($diff), 'in', 'sale_return', "Sale #{$sale->id} - Item qty decreased", null, (string) $sale->id);
+                }
+
+                // Recalculate item subtotal
+                $price = (float) $saleItem->price;
+                $discount = (float) $saleItem->discount; // Keep same discount absolute amount per item or total? Keep total discount absolute as stored.
+                $oldSubtotal = (float) $saleItem->subtotal;
+                $gross = $newQty * $price;
+                // Ensure discount is not more than gross
+                $appliedDiscount = min($discount, $gross);
+                $newSubtotal = $gross - $appliedDiscount;
+
+                // Update item
+                $saleItem->update([
+                    'quantity' => $newQty,
+                    'subtotal' => $newSubtotal,
+                    // keep price and discount
+                ]);
+
+                // Update sale total
+                $sale->update([
+                    'total_amount' => (float) $sale->total_amount - $oldSubtotal + $newSubtotal,
+                ]);
+
+                return $sale->fresh(['saleItems.product']);
+            });
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'sale' => $updatedSale,
+                    'message' => 'Sale item quantity updated successfully',
+                ],
+            ]);
+        } catch (\Symfony\Component\HttpFoundation\Response $abortResponse) {
+            return $abortResponse; // forward abort()
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'code' => 'ERR_SALE_ITEM_UPDATE_FAILED',
+                'message' => 'Failed to update sale item',
+            ], 500);
+        }
+    }
+
+    /**
+     * Remove an item from a sale.
+     */
+    public function removeItem(int $saleId, int $itemId): JsonResponse
+    {
+        $user = auth()->user();
+
+        $sale = Sale::with(['saleItems', 'saleItems.product'])->find($saleId);
+        if (!$sale) {
+            return response()->json([
+                'status' => 'error',
+                'code' => 'ERR_SALE_NOT_FOUND',
+                'message' => 'Sale not found',
+            ], 404);
+        }
+
+        if ($sale->cashier_id !== $user->id) {
+            return response()->json([
+                'status' => 'error',
+                'code' => 'ERR_UNAUTHORIZED',
+                'message' => 'You are not authorized to modify this sale',
+            ], 403);
+        }
+
+        if ($sale->status === 'completed') {
+            return response()->json([
+                'status' => 'error',
+                'code' => 'ERR_SALE_ALREADY_COMPLETED',
+                'message' => 'Sale has already been completed',
+            ], 409);
+        }
+
+        $saleItem = $sale->saleItems->firstWhere('id', $itemId);
+        if (!$saleItem) {
+            return response()->json([
+                'status' => 'error',
+                'code' => 'ERR_SALE_ITEM_NOT_FOUND',
+                'message' => 'Sale item not found',
+            ], 404);
+        }
+
+        try {
+            $updatedSale = DB::transaction(function () use ($sale, $saleItem) {
+                $product = $saleItem->product; // eager loaded
+                $qty = (int) $saleItem->quantity;
+                $subtotal = (float) $saleItem->subtotal;
+
+                // Return stock back in
+                if ($product) {
+                    $product->adjustStock($qty, 'in', 'sale_return', "Sale #{$sale->id} - Item removed", null, (string) $sale->id);
+                }
+
+                // Update sale total
+                $sale->update([
+                    'total_amount' => max(0, (float) $sale->total_amount - $subtotal),
+                ]);
+
+                // Delete item
+                $saleItem->delete();
+
+                return $sale->fresh(['saleItems.product']);
+            });
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'sale' => $updatedSale,
+                    'message' => 'Sale item removed successfully',
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'code' => 'ERR_SALE_ITEM_REMOVE_FAILED',
+                'message' => 'Failed to remove sale item',
+            ], 500);
+        }
+    }
 }

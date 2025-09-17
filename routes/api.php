@@ -59,6 +59,8 @@ Route::middleware('auth:api')->group(function () {
     Route::post('sales/{saleId}/items', [SalesController::class, 'addItem']);
     Route::patch('sales/{saleId}/checkout', [SalesController::class, 'checkout']);
     Route::get('sales/{saleId}', [SalesController::class, 'show']);
+    Route::patch('sales/{saleId}/items/{itemId}', [SalesController::class, 'updateItemQuantity']);
+    Route::delete('sales/{saleId}/items/{itemId}', [SalesController::class, 'removeItem']);
     // Route::apiResource('sales', SalesController::class);
     
     // Reports routes (Manager, Admin only)
