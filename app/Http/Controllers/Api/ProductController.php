@@ -25,7 +25,8 @@ class ProductController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        if (!Gate::allows('accessInventory', auth()->user())) {
+        // Authorization: allow admin, manager, and cashier to view product list
+        if (!auth()->user()->can('viewAny', Product::class)) {
             return response()->json([
                 'status' => 'error',
                 'code' => 'ERR_UNAUTHORIZED',
@@ -125,14 +126,6 @@ class ProductController extends Controller
      */
     public function show(int $id): JsonResponse
     {
-        if (!Gate::allows('accessInventory', auth()->user())) {
-            return response()->json([
-                'status' => 'error',
-                'code' => 'ERR_UNAUTHORIZED',
-                'message' => 'You are not authorized to view products',
-            ], 403);
-        }
-
         $product = Product::with(['category', 'recentStockMovements.user'])->find($id);
 
         if (!$product) {
@@ -141,6 +134,15 @@ class ProductController extends Controller
                 'code' => 'ERR_PRODUCT_NOT_FOUND',
                 'message' => 'Product not found',
             ], 404);
+        }
+
+        // Authorization: allow admin, manager, and cashier to view a specific product
+        if (!auth()->user()->can('view', $product)) {
+            return response()->json([
+                'status' => 'error',
+                'code' => 'ERR_UNAUTHORIZED',
+                'message' => 'You are not authorized to view products',
+            ], 403);
         }
 
         return response()->json([
