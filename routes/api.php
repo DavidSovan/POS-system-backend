@@ -4,9 +4,10 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\UserController;
-use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\SupplierController;
 use App\Http\Controllers\Api\DiscountController;
+use App\Http\Controllers\Api\SalesController;
+use App\Http\Controllers\Api\CategoryController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -37,7 +38,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('users/{id}/profile', [UserController::class, 'show']);
 });
 
-// Product & Inventory Management (Manager, Admin only)
+// Product, Category & Inventory Management (Manager, Admin only)
 Route::middleware('auth:api')->group(function () {
     Route::get('/categories', [CategoryController::class, 'index']);
 
@@ -73,11 +74,29 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/discounts/{id}', [DiscountController::class, 'show']);
     Route::put('/discounts/{id}', [DiscountController::class, 'update']);
     Route::delete('/discounts/{id}', [DiscountController::class, 'destroy']);
+    // Product CRUD routes
+    Route::apiResource('products', ProductController::class);
+
+    // Inventory management routes
+    Route::prefix('inventory')->group(function () {
+        Route::post('add', [InventoryController::class, 'addStock']);
+        Route::post('remove', [InventoryController::class, 'removeStock']);
+        Route::get('movements', [InventoryController::class, 'getAllStockMovements']);
+        Route::get('products/{productId}/movements', [InventoryController::class, 'getProductStockMovements']);
+        Route::get('low-stock', [InventoryController::class, 'getLowStockProducts']);
+    });
 });
 
 // Future routes for POS system modules
 Route::middleware('auth:api')->group(function () {
     // Sales routes (Cashier, Manager, Admin)
+    Route::get('sales', [SalesController::class, 'index']);
+    Route::post('sales', [SalesController::class, 'store']);
+    Route::post('sales/{saleId}/items', [SalesController::class, 'addItem']);
+    Route::patch('sales/{saleId}/checkout', [SalesController::class, 'checkout']);
+    Route::get('sales/{saleId}', [SalesController::class, 'show']);
+    Route::patch('sales/{saleId}/items/{itemId}', [SalesController::class, 'updateItemQuantity']);
+    Route::delete('sales/{saleId}/items/{itemId}', [SalesController::class, 'removeItem']);
     // Route::apiResource('sales', SalesController::class);
 
     // Reports routes (Manager, Admin only)
